@@ -9,6 +9,8 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.mllib.evaluation import MulticlassMetrics
 from pyspark.ml.classification import MultilayerPerceptronClassifier
 
+
+
 def leer_df(rdd):
     conf = SparkConf().setAppName("Pregunta1").setMaster("local")
 	sc = SparkContext(conf=conf)
@@ -17,6 +19,7 @@ def leer_df(rdd):
 	# Leemos el CSV
 	rdd = sqlContext.read.csv("data_tarea3.csv", header=True).rdd
 
+    #Convertir el rdd a df
     rdd = rdd.map(lambda x: ( x[21] ,int(x[54]), int(x[55]), int(x[56]), int(x[57]), int(x[58]) , int(x[59]),
 		                  int(x[60]), int(x[61]), int(x[62]),int(x[63]), int(x[64]), int(x[65]) , int(x[66]),
 		                  int(x[67]), int(x[68]), int(x[69]),int(x[70]), int(x[71]), int(x[72]) , int(x[73]),
@@ -29,6 +32,7 @@ def leer_df(rdd):
                    "SlidingTackle","GKDiving","GKHandling","GKKicking","GKPositioning","GKReflexes"])
     return df
 
+# Elegir los features
 def feature_selection():
     assembler = VectorAssembler(
         inputCols=["Position","Crossing","Finishing","HeadingAccuracy","ShortPassing","Volleys","Dribbling","Curve",
@@ -40,6 +44,7 @@ def feature_selection():
 
     df = assembler.transform(df)
 
+    # Indexar vector
     indexer = VectorIndexer(
         inputCol = "features",
         outputCol = "indexedFeatures",
@@ -56,28 +61,30 @@ def feature_selection():
     resultado = selector.fit(df).transform(df)
     resultado.select("features", "selectedFeatures").show()
 
-    # Dividir nuestro dataset
+    # Dividir dataset
     (training_df, test_df) = df.randomSplit([0.7, 0.3])
 
-    ## ENTRENAMIENTO
+    # Entrenamiento
     entrenador = DecisionTreeClassifier(
 	labelCol="indexedTarget", 
 	featuresCol="indexedFeatures")
 
-    # create and return pipeline
+    # Crear pipeline
     pipeline = Pipeline(stages=[assembler,indexer,entrenador])
     model = pipeline.fit(training_df)
 
-    ## VALIDACION
+    # Validar
     predictions_df = model.transform(test_df)
     predictions_df.select(
         "indexedFeatures", "indexedTarget", 
 	    "prediction", "rawPrediction").show()
 
+    # Accuracy
     evaluator = MulticlassClassificationEvaluator(
 	    labelCol="indexedTarget", predictionCol="prediction",
 	    metricName="accuracy")
 
+    # Metricas
     exactitud = evaluator.evaluate(predictions_df)
     print("Exactitud: {}".format(exactitud))
 

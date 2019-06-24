@@ -6,12 +6,15 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.classification import MultilayerPerceptronClassifier
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 
+
+# Cargar el CSV
 def cargar_data():
 	conf = SparkConf().setAppName("Pregunta2").setMaster("local")
 	sc = SparkContext(conf=conf)
 	sqlContext = SQLContext(sc)
 	return sqlContext.read.csv("data_tarea3.csv", header=True).rdd
 
+# Columnas del CSV a utilizar
 def preprocesar_data(rdd):
 	rdd = rdd.map(lambda x: ( x[21] ,int(x[54]), int(x[55]), int(x[56]), int(x[57]), int(x[58]) , int(x[59]),
 		                  int(x[60]), int(x[61]), int(x[62]),int(x[63]), int(x[64]), int(x[65]) , int(x[66]),
@@ -25,6 +28,7 @@ def preprocesar_data(rdd):
                    "SlidingTackle","GKDiving","GKHandling","GKKicking","GKPositioning","GKReflexes"])
 	return df
 
+# Entrenamiento
 def entrenar(df):
 	vectorAssembler = VectorAssembler(
 		inputCols=["Position","Crossing","Finishing","HeadingAccuracy","ShortPassing","Volleys","Dribbling","Curve",
@@ -51,7 +55,7 @@ def entrenar(df):
 		maxIter=10000
 	)
 
-	# Entrenar RN
+	# Crear pipeline
 	pipeline = Pipeline(
 		stages=[vectorAssembler,
 				stringIndexer, 
@@ -60,6 +64,7 @@ def entrenar(df):
 	)
 	return pipeline.fit(training_df), test_df
 
+# Validacion
 def validar(modelo, test_df):
 	predictions_df = modelo.transform(test_df)
 	predictions_df.select("indexedLabel", 
@@ -68,6 +73,8 @@ def validar(modelo, test_df):
 		labelCol="indexedLabel", predictionCol="prediction",
 		metricName="accuracy"
 	)
+
+	# Exactitud
 	exactitud = evaluador.evaluate(predictions_df)
 	print("Exactitud: {}".format(exactitud))
 	print("PARAMS:{}".format(modelo.explainParams()))
