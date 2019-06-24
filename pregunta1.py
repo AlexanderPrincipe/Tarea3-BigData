@@ -2,89 +2,86 @@ from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler, StringIndexer
-from pyspark.ml.feature import VectorIndexer, StringIndexer
+from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.classification import DecisionTreeClassifier
-from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-from pyspark.mllib.evaluation import MulticlassMetrics
-from pyspark.ml.classification import MultilayerPerceptronClassifier
 
 
+conf = SparkConf().setAppName("Tarea3").setMaster("local")
+sc = SparkContext(conf=conf)
 
-def leer_df(rdd):
-    conf = SparkConf().setAppName("Pregunta1").setMaster("local")
-	sc = SparkContext(conf=conf)
-	sqlContext = SQLContext(sc)
+sqlContext = SQLContext(sc)
 
-	# Leemos el CSV
-	rdd = sqlContext.read.csv("data_tarea3.csv", header=True).rdd
+# Leemos el CSV
+rdd = sqlContext.read.csv("data_final.csv", header=True).rdd
 
-    #Convertir el rdd a df
-    rdd = rdd.map(lambda x: ( x[21] ,int(x[54]), int(x[55]), int(x[56]), int(x[57]), int(x[58]) , int(x[59]),
+# rdd
+rdd = rdd.map(
+	lambda x: ( int(x[21]) ,int(x[54]), int(x[55]), int(x[56]), int(x[57]), int(x[58]) , int(x[59]),
 		                  int(x[60]), int(x[61]), int(x[62]),int(x[63]), int(x[64]), int(x[65]) , int(x[66]),
 		                  int(x[67]), int(x[68]), int(x[69]),int(x[70]), int(x[71]), int(x[72]) , int(x[73]),
 		                  int(x[74]), int(x[75]), int(x[76]),int(x[77]), int(x[78]), int(x[79]) , int(x[80]),
-		                  int(x[81]), int(x[82]), int(x[83]),int(x[84]), int(x[85]), int(x[86]) , int(x[87])))
-    df = rdd.toDF(["Position","Crossing","Finishing","HeadingAccuracy","ShortPassing","Volleys","Dribbling","Curve",
+		                  int(x[81]), int(x[82]), int(x[83]),int(x[84]), int(x[85]), int(x[86]) , int(x[87]) ))
+# Convertimos el rdd a rf                          
+df = rdd.toDF(["Position","Crossing","Finishing","HeadingAccuracy","ShortPassing","Volleys","Dribbling","Curve",
                    "FKAccuracy", "LongPassing","BallControl","Acceleration","SprintSpeed","Agility","Reactions",
                    "Balance","ShotPower","Jumping","Stamina","Strength","LongShots","Aggression",
                    "Interceptions","Positioning","Vision","Penalties","Composure","Marking","StandingTackle",
                    "SlidingTackle","GKDiving","GKHandling","GKKicking","GKPositioning","GKReflexes"])
-    return df
-
-# Elegir los features
-def feature_selection():
-    assembler = VectorAssembler(
-        inputCols=["Position","Crossing","Finishing","HeadingAccuracy","ShortPassing","Volleys","Dribbling","Curve",
+# Creamos vectorassembler
+assembler = VectorAssembler(inputCols=["Position","Crossing","Finishing","HeadingAccuracy","ShortPassing","Volleys","Dribbling","Curve",
                    "FKAccuracy", "LongPassing","BallControl","Acceleration","SprintSpeed","Agility","Reactions",
                    "Balance","ShotPower","Jumping","Stamina","Strength","LongShots","Aggression",
                    "Interceptions","Positioning","Vision","Penalties","Composure","Marking","StandingTackle",
-                   "SlidingTackle","GKDiving","GKHandling","GKKicking","GKPositioning","GKReflexes"],
-        outputCol="features")
+                   "SlidingTackle","GKDiving","GKHandling","GKKicking","GKPositioning","GKReflexes"], outputCol = "features")
+df = assembler.transform(df)
 
-    df = assembler.transform(df)
 
-    # Indexar vector
-    indexer = VectorIndexer(
-        inputCol = "features",
-        outputCol = "indexedFeatures",
-        maxCategorires = 20)
+labelIndexer = StringIndexer(
+	inputCol="Position", outputCol="indexedTarget")
 
-    df = indexer.fit(df).transform(df)
+# Vectorindexer   
+featureIndexer = VectorIndexer(
+	inputCol="features",
+	outputCol="indexedFeatures" ,
+	maxCategories=4)
 
-    # feature selector
-    selector = ChiSqSelector(
-        numTopFeatures=20,
-        featuresCol="indexedFeatures",
-        labelCol="Position",
-        outputCol="selectedFeatures")
-    resultado = selector.fit(df).transform(df)
-    resultado.select("features", "selectedFeatures").show()
+# Dividimos el dataset
+(training_df, test_df) = df.randomSplit([0.7, 0.3])
 
-    # Dividir dataset
-    (training_df, test_df) = df.randomSplit([0.7, 0.3])
-
-    # Entrenamiento
-    entrenador = DecisionTreeClassifier(
+# Entrenamiento
+entrenador = DecisionTreeClassifier(
 	labelCol="indexedTarget", 
 	featuresCol="indexedFeatures")
 
-    # Crear pipeline
-    pipeline = Pipeline(stages=[assembler,indexer,entrenador])
-    model = pipeline.fit(training_df)
+# Creacion de pipeline
+pipeline = Pipeline(stages=[labelIndexer, featureIndexer, entrenador])
+# Se entrena el modelo
+model = pipeline.fit(training_df) 
 
-    # Validar
-    predictions_df = model.transform(test_df)
-    predictions_df.select(
-        "indexedFeatures", "indexedTarget", 
-	    "prediction", "rawPrediction").show()
+# Validacion
+predictions_df = model.transform(test_df)
+predictions_df.select(
+	"indexedFeatures", "indexedTarget", 
+	"prediction", "rawPrediction").show()
 
-    # Accuracy
-    evaluator = MulticlassClassificationEvaluator(
-	    labelCol="indexedTarget", predictionCol="prediction",
-	    metricName="accuracy")
+# Evaluador --> Accuracy
+evaluator = MulticlassClassificationEvaluator(
+	labelCol="indexedTarget", predictionCol="prediction",
+	metricName="accuracy")
 
-    # Metricas
-    exactitud = evaluator.evaluate(predictions_df)
-    print("Exactitud: {}".format(exactitud))
+# Accuracy
+exactitud = evaluator.evaluate(predictions_df)
+print("Exactitud: {}".format(exactitud))
+
+
+
+
+
+
+
+
+
+
+
 
